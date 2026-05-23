@@ -1,4 +1,0 @@
-# Reservado para Fase 2 y Fase 6:
-#   - bootstrap-local.sh  (crea tablas DynamoDB Local + colas ElasticMQ)
-#   - e2e-test.sh         (10 invocaciones curl con asserts de idempotencia)
-#   - firmar-evento.sh    (helper o wrapper sobre el provisto en Template_B2_Serverless/scripts/)

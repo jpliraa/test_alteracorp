@@ -1,0 +1,313 @@
+# =============================================================================
+# Webhook Serverless de Pagos — PayHub → API Gateway → Receiver λ
+#                                       → SQS → Processor λ → DynamoDB pagos
+# Prueba ALT-B2-0526-C04 · Altera · Backend Senior
+# =============================================================================
+#
+# Recursos definidos en este template:
+#   - 1 API Gateway HTTP API con la ruta POST /webhook
+#   - 2 Lambdas (receiver + processor) con IAM least-privilege POR FUNCIÓN
+#   - 1 SQS principal (visibility 5 min) + 1 SQS DLQ (maxReceiveCount 3)
+#   - 2 DynamoDB tables (idempotency_keys con TTL 24h; pagos con PK+SK)
+#   - X-Ray habilitado en Lambdas y API Gateway
+#   - CloudWatch logs con retention parametrizada por stage
+#
+# Comandos clave:
+#   serverless print --stage dev               # validar resolución sin desplegar
+#   serverless deploy --stage dev              # desplegar de verdad (no requerido)
+#   serverless offline start --stage dev       # API Gateway local en :3000
+#   serverless invoke local -f receiver --path Template_B2_Serverless/sample-events/valid-webhook.json
+# =============================================================================
+
+service: prueba-altera-b2
+
+frameworkVersion: '3'
+
+# Carga .env automáticamente; permite que el override local (WEBHOOK_QUEUE_URL,
+# DYNAMODB_ENDPOINT, etc.) gane sobre los valores de deploy cuando corremos
+# `serverless offline` o `serverless invoke local`.
+useDotenv: true
+
+plugins:
+  - serverless-esbuild
+  - serverless-iam-roles-per-function   # IAM por Lambda (least privilege)
+  - serverless-offline-sqs              # ElasticMQ como SQS local
+  - serverless-offline                  # API Gateway local (debe ir último)
+
+# -----------------------------------------------------------------------------
+# Provider — defaults compartidos por todas las Lambdas
+# -----------------------------------------------------------------------------
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 10
+
+  # X-Ray activo en Lambdas y API Gateway (rúbrica: Observabilidad 10%)
+  tracing:
+    lambda: true
+    apiGateway: true
+
+  # Retención de logs por stage (evita pagar storage en dev / cumple en prod)
+  logRetentionInDays: ${self:custom.logRetention.${self:provider.stage}, 14}
+
+  # Variables compartidas; lo que la Lambda lee con process.env.X
+  environment:
+    STAGE: ${self:provider.stage}
+    POWERTOOLS_SERVICE_NAME: ${self:service}
+    POWERTOOLS_METRICS_NAMESPACE: PruebaAlteraB2
+    POWERTOOLS_LOG_LEVEL: ${self:custom.logLevel.${self:provider.stage}, 'INFO'}
+    LOG_LEVEL: ${self:custom.logLevel.${self:provider.stage}, 'INFO'}
+    IDEMPOTENCY_TABLE: ${self:custom.idempotencyTable}
+    PAGOS_TABLE: ${self:custom.pagosTable}
+    # En deploy real: Ref resuelve al URL del SQS. En offline, useDotenv
+    # carga .env y deja que WEBHOOK_QUEUE_URL/DLQ_URL/AWS_ACCESS_KEY_ID
+    # apunten al ElasticMQ local.
+    WEBHOOK_QUEUE_URL:
+      Ref: WebhookQueue
+    WEBHOOK_DLQ_URL:
+      Ref: WebhookDLQ
+    PAYHUB_HMAC_SECRET: ${env:PAYHUB_HMAC_SECRET, 'dev-secret-change-me'}
+
+  # Importante: NO ponemos `iamRoleStatements` al nivel de provider.
+  # Cada función declara su propio bloque, y serverless-iam-roles-per-function
+  # genera una role por Lambda. Resultado: cero permisos compartidos accidentales.
+
+# -----------------------------------------------------------------------------
+# Custom — variables internas y configuración de plugins
+# -----------------------------------------------------------------------------
+custom:
+  idempotencyTable: ${self:service}-idempotency-${self:provider.stage}
+  pagosTable: ${self:service}-pagos-${self:provider.stage}
+  webhookQueueName: ${self:service}-webhook-queue-${self:provider.stage}
+  webhookDlqName: ${self:service}-webhook-dlq-${self:provider.stage}
+
+  logRetention:
+    dev: 14
+    staging: 30
+    prod: 90
+
+  logLevel:
+    dev: DEBUG
+    staging: INFO
+    prod: WARN
+
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node20
+    platform: node
+    concurrency: 10
+    # Bundlear @aws-sdk explícitamente: aunque el runtime Node20 lo incluye,
+    # bundlearlo garantiza versión consistente y evita sorpresas si Lambda
+    # actualiza la SDK del runtime.
+
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+    noPrependStageInUrl: true
+
+  serverless-offline-sqs:
+    autoCreate: false                 # las colas las pre-crea ElasticMQ via conf
+    apiVersion: '2012-11-05'
+    endpoint: http://localhost:9324
+    region: ${self:provider.region}
+    accessKeyId: local
+    secretAccessKey: local
+    skipCacheInvalidation: false
+
+# -----------------------------------------------------------------------------
+# Functions — Receiver y Processor con IAM least privilege individual
+# -----------------------------------------------------------------------------
+functions:
+  # ---------------------------------------------------------------------------
+  # Receiver: camino crítico. HMAC + PutItem condicional + SendMessage SQS.
+  # Memoria y timeout chicos: trabajo I/O-bound liviano.
+  # ---------------------------------------------------------------------------
+  receiver:
+    handler: src/handlers/receiver.handler
+    description: ${self:service} · Recibe webhook PayHub, valida HMAC, garantiza idempotencia y encola
+    memorySize: 512
+    timeout: 10
+    events:
+      - httpApi:
+          method: POST
+          path: /webhook
+    iamRoleStatementsName: ${self:service}-receiver-role-${self:provider.stage}
+    iamRoleStatements:
+      # Solo PutItem sobre idempotency_keys (no GetItem: la verificación se hace
+      # via ConditionExpression en el PutItem).
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource:
+          - Fn::GetAtt: [IdempotencyTable, Arn]
+      # Solo SendMessage en la cola principal (NO DLQ: ahí solo entra por redrive).
+      - Effect: Allow
+        Action:
+          - sqs:SendMessage
+        Resource:
+          - Fn::GetAtt: [WebhookQueue, Arn]
+
+  # ---------------------------------------------------------------------------
+  # Processor: triggered por SQS con partial batch failure.
+  # batchSize=5, maximumBatchingWindow=1 → trade-off latencia vs throughput.
+  # functionResponseType=ReportBatchItemFailures → NO perdemos el batch entero
+  # cuando un mensaje envenena (msg-103 del fixture batch-partial-failure.json).
+  # ---------------------------------------------------------------------------
+  processor:
+    handler: src/handlers/processor.handler
+    description: ${self:service} · Procesa pagos en batch desde SQS con partial batch failure
+    memorySize: 512
+    timeout: 30
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [WebhookQueue, Arn]
+          batchSize: 5
+          maximumBatchingWindow: 1
+          functionResponseType: ReportBatchItemFailures
+    iamRoleStatementsName: ${self:service}-processor-role-${self:provider.stage}
+    iamRoleStatements:
+      # Solo PutItem sobre pagos (NO sobre idempotency_keys: defense in depth
+      # se hace via ConditionalCheck en pagos, no escribiendo en idempotency).
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource:
+          - Fn::GetAtt: [PagosTable, Arn]
+      # Permisos SQS estándar para event source mapping:
+      # ReceiveMessage + DeleteMessage + GetQueueAttributes.
+      # NO SendMessage: el Processor no devuelve nada a la cola.
+      - Effect: Allow
+        Action:
+          - sqs:ReceiveMessage
+          - sqs:DeleteMessage
+          - sqs:GetQueueAttributes
+        Resource:
+          - Fn::GetAtt: [WebhookQueue, Arn]
+
+# -----------------------------------------------------------------------------
+# Resources — CloudFormation puro para SQS y DynamoDB
+# -----------------------------------------------------------------------------
+resources:
+  Resources:
+    # -------------------------------------------------------------------------
+    # DynamoDB · idempotency_keys
+    # PK: idempotencyKey (string, UUID del header X-PayHub-Idempotency-Key)
+    # TTL: 24h vía atributo `ttl` (epoch seconds)
+    # Billing: PAY_PER_REQUEST (tráfico variable, justificado en DECISIONS.md)
+    # -------------------------------------------------------------------------
+    IdempotencyTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.idempotencyTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: idempotencyKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: idempotencyKey
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: false   # tabla efímera; PITR no aporta
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # -------------------------------------------------------------------------
+    # DynamoDB · pagos
+    # PK: transaccionId (string, ID del pago en PayHub)
+    # SK: timestamp (string ISO 8601, permite múltiples eventos por transacción)
+    # -------------------------------------------------------------------------
+    PagosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.pagosTable}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: transaccionId
+            AttributeType: S
+          - AttributeName: timestamp
+            AttributeType: S
+        KeySchema:
+          - AttributeName: transaccionId
+            KeyType: HASH
+          - AttributeName: timestamp
+            KeyType: RANGE
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true    # datos financieros: PITR sí aporta
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # -------------------------------------------------------------------------
+    # SQS · DLQ (debe declararse ANTES que la cola principal por RedrivePolicy)
+    # Retention 14 días (máximo SQS) para tener tiempo de inspeccionar venenos
+    # -------------------------------------------------------------------------
+    WebhookDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.webhookDlqName}
+        MessageRetentionPeriod: 1209600   # 14 días
+        VisibilityTimeout: 60
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # -------------------------------------------------------------------------
+    # SQS · cola principal
+    # VisibilityTimeout 300s (5 min) según diagrama del enunciado.
+    # Regla operativa: VisibilityTimeout ≥ 6 × LambdaTimeout (30s × 10 = 300s).
+    # RedrivePolicy: tras 3 entregas fallidas → DLQ.
+    # -------------------------------------------------------------------------
+    WebhookQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.webhookQueueName}
+        MessageRetentionPeriod: 345600    # 4 días
+        VisibilityTimeout: 300            # 5 min
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt: [WebhookDLQ, Arn]
+          maxReceiveCount: 3
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+  # ---------------------------------------------------------------------------
+  # Outputs — útiles para integraciones, scripts y para que PayHub conozca el URL
+  # ---------------------------------------------------------------------------
+  Outputs:
+    WebhookUrl:
+      Description: Endpoint HTTPS para configurar en PayHub (POST /webhook)
+      Value:
+        Fn::Sub: 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/webhook'
+    IdempotencyTableName:
+      Description: Nombre de la tabla DynamoDB de idempotency keys
+      Value: ${self:custom.idempotencyTable}
+    PagosTableName:
+      Description: Nombre de la tabla DynamoDB de pagos
+      Value: ${self:custom.pagosTable}
+    WebhookQueueUrl:
+      Description: URL de la cola principal SQS
+      Value:
+        Ref: WebhookQueue
+    WebhookDlqUrl:
+      Description: URL de la DLQ
+      Value:
+        Ref: WebhookDLQ

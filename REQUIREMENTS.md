@@ -35,29 +35,29 @@
 
 ## D. Tarea 1 — Setup inicial (~30 min)
 
-- [~] **D.1** Proyecto inicializado con Serverless Framework o AWS SAM. _(decisión tomada: Serverless Framework v3; `serverless.yml` se materializa en Fase 2)_
+- [x] **D.1** Proyecto inicializado con Serverless Framework v3 + plugins (`serverless.yml` materializado en Fase 2).
 - [x] **D.2** `tsconfig.json` con `"strict": true` y configuración productiva (target ES2022, moduleResolution, esModuleInterop, isolatedModules).
 - [x] **D.3** Estructura: `src/handlers/`, `src/services/`, `src/lib/`, `tests/`, `scripts/`.
-- [~] **D.4** Dependencias producción declaradas en `package.json` (`@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/client-sqs`, `@aws-lambda-powertools/{logger,metrics,tracer}`, `zod`). _Pendiente `npm install` por el usuario._
-- [~] **D.5** Dev deps declaradas en `package.json` (`aws-sdk-client-mock`, `aws-sdk-client-mock-jest`, `jest`, `ts-jest`, `@types/{aws-lambda,jest,node}`, `typescript`, `ts-node`, `serverless@^3`, `serverless-offline`, `serverless-offline-sqs`, `serverless-esbuild`, `esbuild`). _Pendiente `npm install` por el usuario._
+- [x] **D.4** Dependencias producción instaladas (`@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/client-sqs`, `@aws-lambda-powertools/{logger,metrics,tracer}`, `zod`).
+- [x] **D.5** Dev deps instaladas (`aws-sdk-client-mock`, `aws-sdk-client-mock-jest`, `jest`, `ts-jest`, `@types/{aws-lambda,jest,node}`, `typescript`, `ts-node`, `serverless@^3`, `serverless-iam-roles-per-function`, `serverless-offline`, `serverless-offline-sqs`, `serverless-esbuild`, `esbuild`).
 - [x] **D.6** `.gitignore` con `node_modules/`, `.serverless/`, `dist/`, `coverage/`, `.dynamodb/`, `.env*`.
 - [ ] **D.7** `git init` + primer commit (lo hace el usuario, mensaje sugerido en cierre de Fase 1).
 
 ## E. Tarea 2 — IaC (~30 min)
 
-- [ ] **E.1** `serverless.yml` (o `template.yaml`) con TODOS los recursos definidos.
-- [ ] **E.2** API Gateway HTTP API: ruta `POST /webhook` → Receiver Lambda.
-- [ ] **E.3** Receiver Lambda: runtime Node 20, memory/timeout sensatos (ej. 512 MB / 10 s), env vars por stage.
-- [ ] **E.4** Processor Lambda: runtime Node 20, memory/timeout sensatos (ej. 512 MB / 30 s), trigger SQS con `batchSize: 5`, `maximumBatchingWindow: 1`, `functionResponseType: ReportBatchItemFailures`.
-- [ ] **E.5** SQS principal: visibility timeout 300 s, redrive policy hacia DLQ con `maxReceiveCount: 3`.
-- [ ] **E.6** SQS DLQ definida.
-- [ ] **E.7** DynamoDB `idempotency_keys`: PK `idempotencyKey` (S), TTL en `ttl`, billing `PAY_PER_REQUEST`.
-- [ ] **E.8** DynamoDB `pagos`: PK `transaccionId` (S), SK `timestamp` (S), billing `PAY_PER_REQUEST`.
-- [ ] **E.9** IAM roles least privilege: cada Lambda con permisos solo a sus recursos (sin `Resource: '*'`). Receiver → put en `idempotency_keys` + send en SQS principal. Processor → put en `pagos` + read/delete en SQS principal + send en DLQ (si aplica).
-- [ ] **E.10** Variables de entorno parametrizadas por stage (`dev`, `staging`, `prod`) usando `${opt:stage}` o equivalente SAM.
-- [ ] **E.11** `provider.tracing.lambda: true` y `provider.tracing.apiGateway: true` (o `Tracing: Active` en SAM).
-- [ ] **E.12** Logs retention configurada (ej. 14 días dev, 90 prod).
-- [ ] **E.13** `serverless print --stage dev` (o `sam validate`) corre sin errores.
+- [x] **E.1** `serverless.yml` con TODOS los recursos definidos (functions, SQS, DLQ, 2 DDB, IAM por función, X-Ray, outputs).
+- [x] **E.2** API Gateway HTTP API: ruta `POST /webhook` → Receiver Lambda.
+- [x] **E.3** Receiver Lambda: runtime `nodejs20.x`, memory 512 MB / timeout 10 s, env vars por stage.
+- [x] **E.4** Processor Lambda: runtime `nodejs20.x`, memory 512 MB / timeout 30 s, trigger SQS con `batchSize: 5`, `maximumBatchingWindow: 1`, `functionResponseType: ReportBatchItemFailures`.
+- [x] **E.5** SQS principal: visibility timeout 300 s, redrive policy hacia DLQ con `maxReceiveCount: 3`.
+- [x] **E.6** SQS DLQ definida con retention 14 días.
+- [x] **E.7** DynamoDB `idempotency_keys`: PK `idempotencyKey` (S), TTL en `ttl`, billing `PAY_PER_REQUEST`.
+- [x] **E.8** DynamoDB `pagos`: PK `transaccionId` (S), SK `timestamp` (S), billing `PAY_PER_REQUEST`, PITR habilitado.
+- [x] **E.9** IAM roles least privilege vía `serverless-iam-roles-per-function`: Receiver → `PutItem` en `idempotency_keys` + `SendMessage` en webhook queue. Processor → `PutItem` en `pagos` + `ReceiveMessage`/`DeleteMessage`/`GetQueueAttributes` en webhook queue. Cero `Resource: '*'`.
+- [x] **E.10** Variables de entorno parametrizadas por stage via `${self:provider.stage}` y maps en `custom.logLevel/logRetention`.
+- [x] **E.11** `provider.tracing.lambda: true` y `apiGateway: true` (X-Ray).
+- [x] **E.12** Logs retention parametrizada por stage (dev:14, staging:30, prod:90 días).
+- [x] **E.13** `serverless print --stage dev` corre sin errores (validado: resuelve provider/functions/resources/outputs sin warnings).
 
 ## F. Tarea 3 — Verificación HMAC (~30 min)
 
@@ -98,12 +98,12 @@
 
 ## I. Tarea 6 — DynamoDB design (~30 min)
 
-- [ ] **I.1** `idempotency_keys`: PK `idempotencyKey` (S). Atributos: `transaccionId` (S), `status` (S), `createdAt` (S, ISO), `ttl` (N, epoch seconds).
-- [ ] **I.2** TTL habilitado sobre `ttl` con expiración a 24 h del `createdAt`.
-- [ ] **I.3** `pagos`: PK `transaccionId` (S), SK `timestamp` (S, ISO). Atributos: `referencia` (S), `clienteRut` (S), `monto` (N), `estado` (S), `idempotencyKey` (S).
-- [ ] **I.4** Billing mode `PAY_PER_REQUEST` en ambas tablas.
-- [ ] **I.5** Decisión "estándar vs FIFO" documentada en `DECISIONS.md` con trade-offs explícitos.
-- [ ] **I.6** Decisión "GSI sí/no" documentada (ej. GSI por `clienteRut` o `estado` si aporta; si no, justificar).
+- [x] **I.1** `idempotency_keys` definida en IaC: PK `idempotencyKey` (S). Atributos `transaccionId`, `status`, `createdAt`, `ttl` se escriben desde el código (Fase 4).
+- [x] **I.2** TTL habilitado sobre atributo `ttl` (24 h se calculan en código en Fase 4).
+- [x] **I.3** `pagos` definida en IaC: PK `transaccionId` (S), SK `timestamp` (S). Atributos restantes se escriben desde el código (Fase 5).
+- [x] **I.4** Billing mode `PAY_PER_REQUEST` en ambas tablas.
+- [x] **I.5** Decisión "estándar vs FIFO" documentada en `DECISIONS.md` (D7) con trade-offs explícitos.
+- [x] **I.6** Decisión "sin GSI inicial" documentada en `DECISIONS.md` (D13) con plan de escalado.
 
 ## J. Tarea 7 — Observabilidad (~45 min)
 
@@ -139,15 +139,15 @@
 
 ## L. Decisiones técnicas a justificar (DECISIONS.md)
 
-- [ ] **L.1** SQS estándar vs FIFO (por qué estándar + idempotencia).
-- [ ] **L.2** Por qué `PAY_PER_REQUEST` y no `PROVISIONED`.
-- [ ] **L.3** `batchSize: 5` y `maximumBatchingWindow: 1` — trade-off latencia vs throughput.
-- [ ] **L.4** `maxReceiveCount: 3` en SQS.
-- [ ] **L.5** Visibility timeout 300 s — relación con timeout de la Lambda.
-- [ ] **L.6** Propagación del correlation ID (header HTTP → body SQS → Logger del Processor).
-- [ ] **L.7** Alarmas propuestas y umbrales.
-- [ ] **L.8** Defense in depth: PutItem condicional en Receiver + recheck/strategy en Processor.
-- [ ] **L.9** Lo que NO se hizo y por qué (límite de tiempo, complejidad innecesaria, etc.).
+- [x] **L.1** SQS estándar vs FIFO (D7).
+- [x] **L.2** `PAY_PER_REQUEST` vs `PROVISIONED` (D11).
+- [x] **L.3** `batchSize: 5` y `maximumBatchingWindow: 1` (D8).
+- [x] **L.4** `maxReceiveCount: 3` (D9).
+- [x] **L.5** Visibility timeout 300 s (D10).
+- [ ] **L.6** Propagación del correlation ID — pendiente Fase 4/5.
+- [ ] **L.7** Alarmas propuestas y umbrales — pendiente Fase 5/7 (`OBSERVABILITY.md`).
+- [ ] **L.8** Defense in depth — pendiente Fase 4/5 con la implementación.
+- [ ] **L.9** Lo que NO se hizo y por qué — sección viva, se cierra en Fase 6 con el README.
 
 ## M. Calidad transversal
 
@@ -161,11 +161,11 @@
 
 ## N. Pruebas locales (entorno docker-compose)
 
-- [ ] **N.1** `docker-compose.yml` con DynamoDB Local + ElasticMQ (SQS local).
-- [ ] **N.2** Script de bootstrap (`scripts/bootstrap-local.sh` o npm script) que crea tablas en DynamoDB Local y la cola + DLQ en ElasticMQ.
-- [ ] **N.3** `serverless-offline` corriendo en `localhost:3000` con `POST /webhook`.
-- [ ] **N.4** Tests unitarios corren sin Docker (mocks vía `aws-sdk-client-mock`).
-- [ ] **N.5** README documenta cómo levantar todo end-to-end localmente.
+- [x] **N.1** `docker-compose.yml` con DynamoDB Local 2.5.2 + ElasticMQ 1.5.7 y healthchecks.
+- [x] **N.2** Script `scripts/bootstrap-local.sh` crea tablas DDB con TTL; colas SQS pre-creadas vía `scripts/elasticmq.conf` con redrive policy.
+- [~] **N.3** `serverless-offline` configurado en `serverless.yml` para `localhost:3000`. _Verificación pendiente: requiere `npm install` + `docker compose up`._
+- [ ] **N.4** Tests unitarios corren sin Docker — pendiente Fases 3-5.
+- [ ] **N.5** README documenta el flujo end-to-end — pendiente Fase 6.
 
 ---
 

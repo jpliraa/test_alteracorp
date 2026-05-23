@@ -1,0 +1,53 @@
+# =============================================================================
+# Stack local para correr la solución sin AWS real.
+#
+#   - dynamodb-local : emulador oficial AWS de DynamoDB (Java)
+#   - elasticmq      : emulador SQS-compatible (Scala), pre-crea las colas
+#                      via scripts/elasticmq.conf (incluye DLQ con redrive 3)
+#
+# Uso:
+#   docker compose up -d                  # levanta ambos servicios
+#   npm run bootstrap:local               # crea las tablas DDB
+#   npm run offline                       # API Gateway local en :3000
+#
+# Puertos expuestos:
+#   8000  → DynamoDB Local
+#   9324  → ElasticMQ API (SQS REST)
+#   9325  → ElasticMQ admin UI (opcional)
+# =============================================================================
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: prueba-altera-b2-ddb
+    # -sharedDb        : una sola base compartida (no por endpoint)
+    # -inMemory        : datos NO persisten al reiniciar (reset rápido)
+    # Para persistir entre runs cambiar a:
+    #   command: -jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data
+    #   volumes: [./.dynamodb:/home/dynamodblocal/data]
+    command: -jar DynamoDBLocal.jar -sharedDb -inMemory
+    ports:
+      - "8000:8000"
+    working_dir: /home/dynamodblocal
+    restart: unless-stopped
+    healthcheck:
+      # DDB Local no expone /health; un GET cualquiera devuelve 400 si está vivo
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000 | grep -qE '^(200|400)$'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.5.7
+    container_name: prueba-altera-b2-mq
+    ports:
+      - "9324:9324"   # SQS API
+      - "9325:9325"   # admin UI
+    volumes:
+      - ./scripts/elasticmq.conf:/opt/elasticmq.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9324/?Action=ListQueues || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

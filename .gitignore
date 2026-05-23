@@ -32,6 +32,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# MS Office temp lock files (e.g. ~$Prueba_Personalizada_*.docx)
+~$*
+
 # Editor
 .vscode/
 .idea/
