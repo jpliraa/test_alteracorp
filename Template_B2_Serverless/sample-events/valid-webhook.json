@@ -1,0 +1,27 @@
+{
+  "_descripcion": "Evento válido — webhook PayHub firmado con HMAC correcto. Tu Receiver λ debe: verificar HMAC OK → upsert idempotency key → enviar a SQS → responder 200.",
+  "_notas_uso": "Reemplaza el header X-PayHub-Signature por el HMAC real generado con tu PAYHUB_HMAC_SECRET sobre el body crudo. Ver `scripts/firmar-evento.sh` en el repo de tu API.",
+  "Records": [
+    {
+      "messageId": "msg-001",
+      "receiptHandle": "rh-001",
+      "body": "{\"eventoId\":\"evt-001\",\"tipo\":\"payment.completed\",\"cobroId\":\"cob-1234\",\"monto\":45000,\"timestamp\":\"2026-05-20T14:30:00Z\",\"firma\":\"sha256-hmac-valido\"}",
+      "messageAttributes": {
+        "X-PayHub-Signature": {
+          "stringValue": "[REEMPLAZAR_CON_HMAC_REAL]",
+          "dataType": "String"
+        }
+      },
+      "md5OfBody": "abc123",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:webhook-queue",
+      "awsRegion": "us-east-1",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1716480000000",
+        "SenderId": "AIDAIENQZJOLO23YVJ4VO",
+        "ApproximateFirstReceiveTimestamp": "1716480000000"
+      }
+    }
+  ]
+}

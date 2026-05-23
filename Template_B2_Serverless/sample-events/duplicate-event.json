@@ -1,0 +1,27 @@
+{
+  "_descripcion": "Evento duplicado — mismo eventoId que valid-webhook.json. Tu Receiver λ debe: verificar HMAC OK → detectar duplicado en DynamoDB (PutItem condicional falla) → responder 200 (idempotente) SIN encolar a SQS.",
+  "_resultado_esperado": "DynamoDB Idempotency: el item NO se actualiza (condición de PutItem rechaza el segundo intento). SQS: NO recibe mensaje duplicado. CloudWatch: log de 'evento duplicado, skip'.",
+  "Records": [
+    {
+      "messageId": "msg-001",
+      "receiptHandle": "rh-001-dup",
+      "body": "{\"eventoId\":\"evt-001\",\"tipo\":\"payment.completed\",\"cobroId\":\"cob-1234\",\"monto\":45000,\"timestamp\":\"2026-05-20T14:30:00Z\",\"firma\":\"sha256-hmac-valido\"}",
+      "messageAttributes": {
+        "X-PayHub-Signature": {
+          "stringValue": "[MISMO_HMAC_QUE_valid-webhook]",
+          "dataType": "String"
+        }
+      },
+      "md5OfBody": "abc123",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:webhook-queue",
+      "awsRegion": "us-east-1",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1716480005000",
+        "SenderId": "AIDAIENQZJOLO23YVJ4VO",
+        "ApproximateFirstReceiveTimestamp": "1716480005000"
+      }
+    }
+  ]
+}

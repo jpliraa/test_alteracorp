@@ -1,0 +1,5 @@
+# Reservado para Fase 4+:
+#   - idempotency.ts  (PutItem condicional en idempotency_keys; manejo de ConditionalCheckFailedException)
+#   - queue.ts        (SendMessage a SQS principal)
+#   - payments.ts     (PutItem en pagos; simulación 5% fallo transient)
+#   - schemas.ts      (Zod schemas: webhook body, SQS message body)

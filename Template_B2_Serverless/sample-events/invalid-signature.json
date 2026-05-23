@@ -1,0 +1,26 @@
+{
+  "_descripcion": "Evento con firma HMAC inválida. Tu Receiver λ debe rechazar con 401 sin encolar a SQS. Tampoco debe escribir en DynamoDB idempotency.",
+  "Records": [
+    {
+      "messageId": "msg-002",
+      "receiptHandle": "rh-002",
+      "body": "{\"eventoId\":\"evt-002\",\"tipo\":\"payment.completed\",\"cobroId\":\"cob-1235\",\"monto\":67000,\"timestamp\":\"2026-05-20T14:31:00Z\"}",
+      "messageAttributes": {
+        "X-PayHub-Signature": {
+          "stringValue": "este-no-es-un-hmac-valido-XXXX",
+          "dataType": "String"
+        }
+      },
+      "md5OfBody": "def456",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:webhook-queue",
+      "awsRegion": "us-east-1",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1716480060000",
+        "SenderId": "AIDAIENQZJOLO23YVJ4VO",
+        "ApproximateFirstReceiveTimestamp": "1716480060000"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# Reservado para Fase 3+:
+#   - hmac.ts      (Tarea 3: verificación HMAC con timingSafeEqual)
+#   - logger.ts    (Powertools Logger configurado)
+#   - tracer.ts    (Powertools Tracer configurado)
+#   - metrics.ts   (Powertools Metrics con dimensiones por defecto)
+#   - env.ts       (lectura tipada de process.env con Zod)
+#   - errors.ts    (clases de error tipadas: SignatureError, ValidationError, etc.)

@@ -1,0 +1,51 @@
+{
+  "_descripcion": "Batch SQS con 5 mensajes. El #3 tiene un error de parsing intencional. Tu Processor λ debe usar partial batch response: procesar #1, #2, #4, #5; reportar SOLO #3 como failure (no perder los demás).",
+  "_resultado_esperado": "Response del Processor: {batchItemFailures: [{itemIdentifier: 'msg-103'}]}. Los mensajes #1, #2, #4, #5 deben quedar en DynamoDB Pagos. El #3 vuelve a la cola (y eventualmente a DLQ tras 3 reintentos).",
+  "Records": [
+    {
+      "messageId": "msg-101",
+      "receiptHandle": "rh-101",
+      "body": "{\"cobroId\":\"cob-2001\",\"monto\":35000,\"clienteRut\":\"12345678-9\"}",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:processor-queue",
+      "awsRegion": "us-east-1",
+      "attributes": { "ApproximateReceiveCount": "1" }
+    },
+    {
+      "messageId": "msg-102",
+      "receiptHandle": "rh-102",
+      "body": "{\"cobroId\":\"cob-2002\",\"monto\":67000,\"clienteRut\":\"14567891-2\"}",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:processor-queue",
+      "awsRegion": "us-east-1",
+      "attributes": { "ApproximateReceiveCount": "1" }
+    },
+    {
+      "messageId": "msg-103",
+      "receiptHandle": "rh-103",
+      "body": "{ESTO NO ES JSON VALIDO, debe fallar al parsear}",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:processor-queue",
+      "awsRegion": "us-east-1",
+      "attributes": { "ApproximateReceiveCount": "1" }
+    },
+    {
+      "messageId": "msg-104",
+      "receiptHandle": "rh-104",
+      "body": "{\"cobroId\":\"cob-2003\",\"monto\":89000,\"clienteRut\":\"16789012-3\"}",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:processor-queue",
+      "awsRegion": "us-east-1",
+      "attributes": { "ApproximateReceiveCount": "1" }
+    },
+    {
+      "messageId": "msg-105",
+      "receiptHandle": "rh-105",
+      "body": "{\"cobroId\":\"cob-2004\",\"monto\":123000,\"clienteRut\":\"18901234-K\"}",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:processor-queue",
+      "awsRegion": "us-east-1",
+      "attributes": { "ApproximateReceiveCount": "1" }
+    }
+  ]
+}
