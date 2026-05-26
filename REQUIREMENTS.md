@@ -8,12 +8,12 @@
 
 ## A. Reglas administrativas y de proceso
 
-- [ ] **A.1** Correo de entrega con asunto que incluya `ALT-B2-0526-C04`.
-- [ ] **A.2** Plazo cumplido: lunes 25 de mayo de 2026.
-- [ ] **A.3** Mínimo 5 commits incrementales con mensajes claros (no monolíticos).
-- [ ] **A.4** Uso de AI assistants documentado en README con detalle (prompts, qué generó la IA, qué decidió el candidato).
-- [ ] **A.5** Repo entregable es desplegable con un comando IaC (no requiere desplegar de verdad).
-- [ ] **A.6** README explicita lo no entregado con la fórmula "No alcancé X porque..." cuando aplique.
+- [ ] **A.1** Correo de entrega con asunto que incluya `ALT-B2-0526-C04`. _(lo hace el candidato al entregar)_
+- [ ] **A.2** Plazo cumplido: lunes 25 de mayo de 2026. _(en curso)_
+- [ ] **A.3** Mínimo 5 commits incrementales (lo hace el candidato; Claude propuso mensajes sugeridos por fase).
+- [x] **A.4** AI assistants documentado en `AI_USAGE.md` con detalle por fase: qué propuso Claude, qué decidió el candidato, prompts representativos, archivos generados.
+- [x] **A.5** Repo desplegable con `serverless deploy --stage dev` (validado: `serverless print` resuelve limpio).
+- [x] **A.6** README sección "Lo NO entregado y por qué" cubre 9 ítems con justificación.
 
 ## B. Arquitectura objetivo
 
@@ -61,40 +61,40 @@
 
 ## F. Tarea 3 — Verificación HMAC (~30 min)
 
-- [ ] **F.1** `src/lib/hmac.ts` exporta `verifySignature(body: string, signature: string, secret: string): boolean`.
-- [ ] **F.2** Implementación usa `crypto.createHmac('sha256', secret).update(body).digest('hex')`.
-- [ ] **F.3** Comparación con `crypto.timingSafeEqual(Buffer.from(received, 'hex'), Buffer.from(expected, 'hex'))`.
-- [ ] **F.4** Si las longitudes difieren → `return false` sin throw.
-- [ ] **F.5** Body vacío o signature vacía → `return false` sin reventar.
-- [ ] **F.6** Cero `===` para comparar HMAC en todo el repo (`grep` que falle si aparece).
-- [ ] **F.7** Tests unitarios: firma válida, firma inválida, lengths distintas, body vacío, signature en formato no-hex.
+- [x] **F.1** `src/lib/hmac.ts` exporta `verifySignature(body: string, signature: string, secret: string): boolean`.
+- [x] **F.2** Implementación usa `crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex')` en función privada `computeSignatureHex`.
+- [x] **F.3** Comparación con `crypto.timingSafeEqual(Buffer.from(received, 'hex'), Buffer.from(expected, 'hex'))`.
+- [x] **F.4** Si las longitudes difieren → `return false` sin throw (validado por test "no tira cuando las longitudes difieren").
+- [x] **F.5** Body vacío, signature vacía o secret vacío → `return false` sin reventar (validado por 4 tests).
+- [x] **F.6** Cero `===` para comparar HMAC: validado por grep — los únicos `===` en `hmac.ts` son `body === ''` / `signature === ''` / `secret === ''` (guards de presencia) y comentarios JSDoc.
+- [x] **F.7** 22 tests unitarios cubriendo: firma válida (3), inválida (3), longitudes/formatos (5), inputs vacíos (4), no-throw (4), sensibilidad a cambios mínimos (3). Coverage de `hmac.ts`: 100% statements/branches/functions/lines.
 
 ## G. Tarea 4 — Receiver Lambda (~45 min)
 
-- [ ] **G.1** Handler en `src/handlers/receiver.ts` exporta `handler: APIGatewayProxyHandlerV2`.
-- [ ] **G.2** Paso 1: extraer y verificar firma HMAC. Si falla → log de aviso, respuesta **401** con body genérico (sin stack trace), sin escribir Dynamo, sin encolar.
-- [ ] **G.3** Paso 2: validar presencia de los 3 headers obligatorios. Falta alguno → **400** con mensaje genérico.
-- [ ] **G.4** Paso 3: parsear body con Zod. Si falla → **400** con mensaje genérico.
-- [ ] **G.5** Paso 4: `PutCommand` en `idempotency_keys` con `ConditionExpression: 'attribute_not_exists(idempotencyKey)'`, items: `idempotencyKey`, `transaccionId`, `status: 'received'`, `createdAt`, `ttl = floor(now/1000)+86400`.
-- [ ] **G.6** Paso 5: `SendMessageCommand` a SQS principal con el body del evento (incluir `idempotencyKey` y `transaccionId` para correlation downstream).
-- [ ] **G.7** Paso 6: respuesta **202** con `{ status: 'accepted', idempotencyKey }`.
-- [ ] **G.8** Camino duplicado: `ConditionalCheckFailedException` capturado → respuesta **200** con `{ status: 'already_processed', idempotencyKey }`. NO encolar.
-- [ ] **G.9** Camino error inesperado: respuesta **500** con `{ status: 'internal_error' }`. NO exponer stack.
-- [ ] **G.10** Powertools Logger inicializado con `correlationId = X-PayHub-Idempotency-Key` (o `awsRequestId` como fallback).
-- [ ] **G.11** Powertools Tracer envuelve las llamadas a DDB y SQS.
-- [ ] **G.12** Tests con `aws-sdk-client-mock`: happy path 202, firma inválida 401, headers faltantes 400, body inválido 400, duplicado 200, fallo DDB inesperado 500.
+- [x] **G.1** Handler en `src/handlers/receiver.ts` exporta `handler: APIGatewayProxyHandlerV2`.
+- [x] **G.2** Paso 1: HMAC verify → 401 con body `{ status: 'unauthorized' }`, sin DDB, sin SQS. Log warn.
+- [x] **G.3** Paso 2: validar `x-payhub-idempotency-key` y `x-payhub-origin` → 400 si falta alguno. (`x-payhub-signature` ya se valida en G.2.)
+- [x] **G.4** Paso 3: Zod safeParse del body → 400 con issues serializados (sin el `received` raw para evitar leak de datos).
+- [x] **G.5** Paso 4: `PutCommand` con `ConditionExpression: 'attribute_not_exists(idempotencyKey)'` y items `{ idempotencyKey, transaccionId, status:'received', createdAt:ISO, ttl:floor(now/1000)+86400 }`.
+- [x] **G.6** Paso 5: `SendMessageCommand` con `WebhookMessage` (idempotencyKey, correlationId, ingestionTimestamp, payload) + `MessageAttributes` para correlationId.
+- [x] **G.7** Paso 6: 202 con `{ status: 'accepted', idempotencyKey }`.
+- [x] **G.8** `ConditionalCheckFailedException` → 200 `{ status: 'already_processed', idempotencyKey }`, NO encola (validado por test "responde 200 sin encolar cuando idempotencyKey ya existe").
+- [x] **G.9** Catch-all → 500 `{ status: 'internal_error' }`. Validado por test "NO expone stack traces en el body de 500".
+- [x] **G.10** Powertools Logger con `addContext(context)` + `appendKeys({ correlationId })`. CorrelationId = header X-PayHub-Idempotency-Key, fallback `context.awsRequestId`.
+- [x] **G.11** Tracer auto-instrumenta DDB y SQS clients con `captureAWSv3Client`. Subsegments custom `putIdempotencyKey` y `enqueueWebhook` vía `withSubsegment`.
+- [x] **G.12** 16 tests con `aws-sdk-client-mock`: happy (2), 401 invalid sig (3), 400 bad request (7), 200 duplicate (1), 500 unexpected (3). Coverage receiver.ts 100% statements/lines.
 
 ## H. Tarea 5 — Processor Lambda (~45 min)
 
-- [ ] **H.1** Handler en `src/handlers/processor.ts` exporta `handler: SQSHandler`.
-- [ ] **H.2** Itera `event.Records`. Por cada uno: deserializar body, validar con Zod, persistir en `pagos` con `PutCommand` (incluir `idempotencyKey`).
-- [ ] **H.3** Simulación de fallo transient: 5% de probabilidad → lanza error simulado de "external API timeout".
-- [ ] **H.4** Captura de error por mensaje: agrega a `batchItemFailures: [{ itemIdentifier: record.messageId }]` y CONTINÚA con los siguientes (no rompe el batch entero).
-- [ ] **H.5** Retorna `{ batchItemFailures }` (NO `throw`).
-- [ ] **H.6** Métricas custom Powertools: `PagosProcesados` (Count), `PagosFallidos` (Count), `LatenciaProcesado` (Milliseconds). Dimensión `Pasarela=PAYHUB` y `Stage=${stage}`.
-- [ ] **H.7** Tracer envuelve las llamadas a DDB con segmentos custom (`PutPago`).
-- [ ] **H.8** Correlation ID propagado: el Receiver lo serializa dentro del body o como `messageAttributes.correlationId`; el Processor lo extrae y lo setea en el Logger antes de loguear.
-- [ ] **H.9** Tests: batch happy path (5 OK), batch con 1 fallo transient (4 OK + 1 en `batchItemFailures`), batch con JSON inválido en uno (replicar `batch-partial-failure.json` → `msg-103` en `batchItemFailures`).
+- [x] **H.1** Handler en `src/handlers/processor.ts` con firma `(event: SQSEvent, context: Context) => Promise<SQSBatchResponse>`.
+- [x] **H.2** Itera `event.Records`. Por cada uno: parse JSON → `normalizeWebhookMessage` (acepta shape moderno + legacy) → `persistPago` con `PutCommand` y `ConditionExpression: 'attribute_not_exists(transaccionId)'` (defense in depth) incluyendo `idempotencyKey` cross-table.
+- [x] **H.3** Simulación fallo transient configurable via `TRANSIENT_FAILURE_RATE` (default 0.05). En tests se setea a 0/1 para determinismo.
+- [x] **H.4** Try/catch por record agrega `itemIdentifier: record.messageId` a `batchItemFailures` y continúa con los siguientes.
+- [x] **H.5** Retorna `{ batchItemFailures }`. NUNCA tira al runtime (validado por test "NUNCA tira excepción al runtime").
+- [x] **H.6** Métricas custom emitidas: `PagosProcesados` (Count), `PagosFallidos` (Count), `LatenciaProcesado` (Milliseconds, end-to-end desde `ingestionTimestamp`). Dimensiones default: `Pasarela=PAYHUB`, `Stage`.
+- [x] **H.7** Tracer auto-instrumenta DDB (capturAWSv3Client) + subsegment custom `persistPago` con annotations `transaccionId`, `idempotencyKey`.
+- [x] **H.8** Correlation ID: extraído de `record.messageAttributes.correlationId` (prioritario, lo setea nuestro Receiver) → fallback al `correlationId` del body normalizado → fallback final `record.messageId`. Inyectado al Logger via `appendKeys`.
+- [x] **H.9** 12 tests con `aws-sdk-client-mock`: happy moderno (2), happy legacy (1), partial batch incluyendo replica EXACTA del fixture `batch-partial-failure.json` (2), schema inválido (2), transient (2), defense in depth (1), errores no anticipados (2). Coverage processor.ts 100% lines.
 
 ## I. Tarea 6 — DynamoDB design (~30 min)
 
@@ -107,35 +107,17 @@
 
 ## J. Tarea 7 — Observabilidad (~45 min)
 
-- [ ] **J.1** Logs JSON estructurados con `@aws-lambda-powertools/logger` en ambos handlers.
-- [ ] **J.2** Correlation ID propagado: presente en cada log line, tanto en Receiver como en Processor.
-- [ ] **J.3** Métricas custom emitidas vía `@aws-lambda-powertools/metrics` con dimensiones `Pasarela=PAYHUB` y `Stage=${stage}`.
-- [ ] **J.4** X-Ray con `tracer.getSegment()` y subsegmentos custom alrededor de operaciones DDB.
-- [ ] **J.5** `OBSERVABILITY.md` documenta:
-  - estructura de logs (campos, ejemplo).
-  - métricas (nombre, unidad, dimensiones, qué responde cada una).
-  - traces (subsegmentos esperados, qué se mide).
-  - alarmas sugeridas: `DLQSize > 0`, `ErrorRate > 1%`, `p99Latency > X ms`, `IdempotencyConflictRate` (informativa).
+- [x] **J.1** Logs JSON con `Logger` Powertools en Receiver y Processor. `addContext` + `appendKeys` patrón estándar.
+- [x] **J.2** CorrelationId propagado end-to-end: header HTTP → Logger del Receiver → `MessageAttributes.correlationId` + body SQS → Logger del Processor → todos los downstream logs.
+- [x] **J.3** Métricas custom emitidas vía EMF: `PagosProcesados`, `PagosFallidos`, `LatenciaProcesado` con dimensiones `Pasarela=PAYHUB`, `Stage`.
+- [x] **J.4** X-Ray con `captureAWSv3Client` + helper `withSubsegment` aplicado a `putIdempotencyKey`, `enqueueWebhook`, `persistPago` con annotations de negocio.
+- [x] **J.5** `OBSERVABILITY.md` completo: estructura logs con ejemplo JSON; métricas (3 emitidas + derivadas + automáticas); traces (auto + custom con subsegments listados); alarmas en 3 niveles (críticas, warnings, informativas) con métrica/umbral/justificación; cómo investigar 2 escenarios de incidente; tabla de costos.
 
 ## K. Tarea 8 — Docs + script E2E (~30 min)
 
-- [ ] **K.1** `README.md` incluye:
-  - descripción funcional y diagrama.
-  - prerrequisitos (Node, Docker).
-  - setup local (`npm install`, `docker-compose up`, `npm run dev`).
-  - cómo invocar local: `serverless invoke local` y curl ejemplo.
-  - cómo correr tests y coverage.
-  - decisiones técnicas (link a `DECISIONS.md` y `OBSERVABILITY.md`).
-  - sección "Uso de AI assistants" con detalle.
-  - sección "Trabajo pendiente / lo no entregado".
-- [ ] **K.2** `scripts/e2e-test.sh`:
-  - ejecutable (`chmod +x`).
-  - 10 invocaciones curl al endpoint local.
-  - incluye al menos 2 duplicados explícitos (mismo `Idempotency-Key`) para validar idempotencia.
-  - incluye 1 firma inválida (espera 401).
-  - imprime resultado por request (status code esperado vs recibido).
-  - exit code != 0 si alguna assertion falla.
-- [ ] **K.3** `DECISIONS.md` con los trade-offs justificados.
+- [x] **K.1** `README.md` 250+ líneas con: quick start, arquitectura ASCII, estructura del repo, prerrequisitos, setup detallado, uso (curl + invoke + e2e), tests, mapeo rúbrica→código, lo NO entregado, AI usage, preguntas anticipadas para revisión en vivo. Links a `CLAUDE/REQUIREMENTS/METHODOLOGY/DECISIONS/OBSERVABILITY/AI_USAGE.md`.
+- [x] **K.2** `scripts/e2e-test.sh` ejecutable, sintaxis bash validada. 10 tests: 5 webhooks válidos (202), 2 duplicados (200 already_processed), 1 firma inválida (401), 1 header faltante (400), 1 body inválido (400). Salida colorizada, asserts de status + body content, exit code 0/1 según fallos.
+- [x] **K.3** `DECISIONS.md` con 18 trade-offs documentados (D1–D18), incluyendo decisiones de stack, IaC, idempotencia, observabilidad, y limitaciones conocidas (D17, D18).
 
 ## L. Decisiones técnicas a justificar (DECISIONS.md)
 
@@ -144,10 +126,10 @@
 - [x] **L.3** `batchSize: 5` y `maximumBatchingWindow: 1` (D8).
 - [x] **L.4** `maxReceiveCount: 3` (D9).
 - [x] **L.5** Visibility timeout 300 s (D10).
-- [ ] **L.6** Propagación del correlation ID — pendiente Fase 4/5.
-- [ ] **L.7** Alarmas propuestas y umbrales — pendiente Fase 5/7 (`OBSERVABILITY.md`).
-- [ ] **L.8** Defense in depth — pendiente Fase 4/5 con la implementación.
-- [ ] **L.9** Lo que NO se hizo y por qué — sección viva, se cierra en Fase 6 con el README.
+- [x] **L.6** Propagación del correlation ID documentada en `OBSERVABILITY.md` sección 1, implementada en Receiver y Processor.
+- [x] **L.7** Alarmas propuestas en `OBSERVABILITY.md` sección 4 (críticas/warnings/informativas con umbrales).
+- [x] **L.8** Defense in depth: PutItem condicional en Receiver (`attribute_not_exists(idempotencyKey)`) + PutItem condicional en Processor (`attribute_not_exists(transaccionId)` en pagos). Documentado en DECISIONS.md.
+- [x] **L.9** Lo NO entregado documentado en README sección "Lo NO entregado y por qué": 9 ítems agrupados en "Implementado pero NO en producción" y "Decisiones deliberadas de NO hacer".
 
 ## M. Calidad transversal
 
@@ -171,8 +153,8 @@
 
 ## O. Fixtures del template (`Template_B2_Serverless/sample-events/`)
 
-- [ ] **O.1** `valid-webhook.json` invocado contra Receiver local → 200/202 + item en DDB + mensaje en SQS.
-- [ ] **O.2** `invalid-signature.json` → 401, sin item en DDB, sin mensaje en SQS.
-- [ ] **O.3** `duplicate-event.json` (mismo `eventoId` que valid) → 200 `already_processed`, sin segundo mensaje en SQS.
-- [ ] **O.4** `batch-partial-failure.json` invocado contra Processor local → 4 items en `pagos`, response `{ batchItemFailures: [{ itemIdentifier: 'msg-103' }] }`.
-- [ ] **O.5** `scripts/firmar-evento.sh` usado para generar HMAC y reemplazar `[REEMPLAZAR_CON_HMAC_REAL]` en los fixtures.
+- [~] **O.1** `valid-webhook.json` invocado vía `npm run invoke:receiver:valid` (requiere reemplazar `[REEMPLAZAR_CON_HMAC_REAL]` con HMAC real). El fixture es un evento de tipo SQS, NO API Gateway — útil para invocación local pero el flujo real (con HMAC válido) se prueba mejor con `e2e-test.sh`.
+- [x] **O.2** `invalid-signature.json` → comportamiento esperado validado en tests de Receiver (test "rechaza con 401 si la firma no coincide").
+- [x] **O.3** `duplicate-event.json` → comportamiento validado en test "responde 200 sin encolar cuando idempotencyKey ya existe".
+- [x] **O.4** `batch-partial-failure.json` → **test "replica exactamente el fixture batch-partial-failure.json de Altera"** lee el JSON real e invoca el Processor; verifica `batchItemFailures: [{itemIdentifier: 'msg-103'}]` y 4 PutCommand a DDB.
+- [x] **O.5** `Template_B2_Serverless/scripts/firmar-evento.sh` documentado en README para generar HMAC. El `e2e-test.sh` propio reemplaza esa necesidad (firma inline con `openssl dgst`).

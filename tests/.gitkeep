@@ -1,7 +1,0 @@
-# Tests con jest + ts-jest + aws-sdk-client-mock.
-# Estructura prevista:
-#   - tests/unit/lib/hmac.test.ts
-#   - tests/unit/handlers/receiver.test.ts
-#   - tests/unit/handlers/processor.test.ts
-#   - tests/unit/services/*.test.ts
-# Coverage threshold: 70% (configurado en jest.config.ts).

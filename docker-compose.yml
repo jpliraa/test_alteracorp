@@ -38,7 +38,7 @@ services:
       retries: 10
 
   elasticmq:
-    image: softwaremill/elasticmq-native:1.5.7
+    image: softwaremill/elasticmq-native:1.6.11
     container_name: prueba-altera-b2-mq
     ports:
       - "9324:9324"   # SQS API

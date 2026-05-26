@@ -45,7 +45,7 @@ require_cmd() {
 wait_for_url() {
   local url="$1" attempts=30
   for ((i=1; i<=attempts; i++)); do
-    if curl -sf -o /dev/null "$url" || [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" =~ ^(200|400|404)$ ]; then
+    if curl -sf -o /dev/null "$url" || [[ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" =~ ^(200|400|404)$ ]]; then
       return 0
     fi
     sleep 1

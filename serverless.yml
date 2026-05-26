@@ -62,14 +62,20 @@ provider:
     LOG_LEVEL: ${self:custom.logLevel.${self:provider.stage}, 'INFO'}
     IDEMPOTENCY_TABLE: ${self:custom.idempotencyTable}
     PAGOS_TABLE: ${self:custom.pagosTable}
-    # En deploy real: Ref resuelve al URL del SQS. En offline, useDotenv
-    # carga .env y deja que WEBHOOK_QUEUE_URL/DLQ_URL/AWS_ACCESS_KEY_ID
-    # apunten al ElasticMQ local.
-    WEBHOOK_QUEUE_URL:
-      Ref: WebhookQueue
-    WEBHOOK_DLQ_URL:
-      Ref: WebhookDLQ
+    # URLs de las colas:
+    #   - En offline: WEBHOOK_QUEUE_URL viene de .env (ElasticMQ).
+    #   - En deploy real: se setea desde CI/SSM con la URL construida o el output
+    #     del stack CloudFormation. NO usamos `Ref: WebhookQueue` directo en el
+    #     env block porque en offline no resuelve y queda como '[object Object]'.
+    #   - El Ref está disponible como Output (ver `resources.Outputs`).
+    WEBHOOK_QUEUE_URL: ${env:WEBHOOK_QUEUE_URL, ''}
+    WEBHOOK_DLQ_URL: ${env:WEBHOOK_DLQ_URL, ''}
     PAYHUB_HMAC_SECRET: ${env:PAYHUB_HMAC_SECRET, 'dev-secret-change-me'}
+    # Endpoints locales (DDB Local / ElasticMQ). En prod NO se setean → SDK usa AWS real.
+    DYNAMODB_ENDPOINT: ${env:DYNAMODB_ENDPOINT, ''}
+    SQS_ENDPOINT: ${env:SQS_ENDPOINT, ''}
+    IS_OFFLINE: ${env:IS_OFFLINE, ''}
+    TRANSIENT_FAILURE_RATE: ${env:TRANSIENT_FAILURE_RATE, '0.05'}
 
   # Importante: NO ponemos `iamRoleStatements` al nivel de provider.
   # Cada función declara su propio bloque, y serverless-iam-roles-per-function
