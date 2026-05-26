@@ -19,7 +19,6 @@ Sistema serverless en AWS que recibe webhooks de una pasarela de pagos ficticia 
 9. [Documentación adicional](#documentación-adicional)
 10. [Lo NO entregado y por qué](#lo-no-entregado-y-por-qué)
 11. [Uso de AI assistants](#uso-de-ai-assistants)
-12. [Notas para la revisión en vivo](#notas-para-la-revisión-en-vivo)
 
 ---
 
@@ -362,49 +361,15 @@ npm run typecheck                    # tsc --noEmit
 
 ## Uso de AI assistants
 
-Usé Claude (Anthropic) via Claude Code durante toda la construcción. **Documentación honesta en [`AI_USAGE.md`](AI_USAGE.md)**.
+Usé Claude (Anthropic) via Claude Code durante la construcción. Detalle en [`AI_USAGE.md`](AI_USAGE.md).
 
 Resumen:
 
-- **Setup**: le di los archivos del enunciado (.docx + Template_B2_Serverless/) y pedí que generara un brain del proyecto.
-- **Construcción por fases**: cada una fue una conversación corta acordando qué crear, qué decidir, cómo testear, qué documentar.
-- **Decisiones que tomé yo**: Serverless Framework v3 (vs SAM/v4), Jest+ts-jest (vs vitest), commits a mi cargo, soporte legacy en schemas, documentar D17 como limitación.
-- **Decisiones que Claude propuso y validé**: estructura `handlers/services/lib`, `serverless-iam-roles-per-function`, helper `withSubsegment`, singleton pattern para Powertools, defense in depth con `ConditionExpression` en pagos.
-
-**Para la revisión en vivo**: cada fase fue una iteración de Q&A, por lo que puedo explicar línea por línea y modificar bajo demanda. Los archivos que conozco más a fondo: `hmac.ts`, `receiver.ts`, `processor.ts`, `serverless.yml`.
+- **Setup**: provistos los archivos del enunciado (.docx + `Template_B2_Serverless/`), Claude generó el brain del proyecto (CLAUDE / REQUIREMENTS / METHODOLOGY).
+- **Construcción por fases**: conversación corta por fase acordando qué crear, qué decidir, cómo testear, qué documentar.
+- **Decisiones del candidato**: Serverless Framework v3 (vs SAM/v4), Jest+ts-jest (vs vitest), control de commits, soporte legacy en schemas (D18), documentar D17 como limitación en vez de implementar compensación parcial.
+- **Decisiones propuestas por Claude y validadas**: estructura `handlers/services/lib`, `serverless-iam-roles-per-function`, helper `withSubsegment`, singleton de Powertools, defense in depth con `ConditionExpression` en `pagos`.
 
 ---
 
-## Notas para la revisión en vivo
-
-> "La entrega técnica es la mitad de la evaluación; la revisión en vivo es la otra mitad."
-
-### Preguntas anticipadas con respuesta lista
-
-| Pregunta | Respuesta (resumida; detalle en DECISIONS.md) |
-|---|---|
-| ¿Por qué Serverless v3 y no v4? | v4 requiere licencia paga; v3 sigue OSS y cubre el scope. (D1) |
-| ¿Por qué IAM role por Lambda? | Least privilege real: si Receiver se compromete, no toca `pagos`. (D6) |
-| ¿Por qué `VisibilityTimeout: 300`? | Regla AWS: ≥ 6 × LambdaTimeout (6×30=180s mínimo); 300 da margen. (D10) |
-| ¿Por qué SQS estándar y no FIFO? | FIFO bloquea batch en partial failure; idempotencia ya en app layer. (D7) |
-| ¿Por qué `timingSafeEqual` y no `===`? | Timing attack: con `===` el tiempo depende del byte donde difieren. (Tarea 3) |
-| ¿Por qué regex hex antes de `Buffer.from`? | Sin regex, chars inválidos truncan silenciosamente el buffer. (D16) |
-| ¿Por qué no exportás `computeSignatureHex`? | Para evitar `received === computeSignatureHex(...)` (timing attack). (D16) |
-| ¿Por qué dos schemas (moderno + legacy)? | El fixture `batch-partial-failure.json` usa shape legacy; sin soporte, los 5 records irían a `batchItemFailures`. (D18) |
-| ¿Por qué `ConditionExpression` también en `pagos`? | Defense in depth: SQS at-least-once puede entregar el mismo mensaje 2 veces. |
-| ¿Qué pasa si SQS falla tras PutItem exitoso? | Mensaje pierde (documentado en D17). Mitigación prod: DDB Streams reconciler. |
-| ¿Cómo se propaga el correlationId? | Header → Receiver Logger → SQS MessageAttributes + body → Processor Logger. Detalle en OBSERVABILITY.md §1. |
-| ¿Qué alarmas propondrías? | DLQ > 0 (crítica), Error rate > 1% (crítica), p99 latency > 5s (crítica). Detalle en OBSERVABILITY.md §4. |
-
-### Cómo prepararse para modificar código en vivo
-
-Áreas donde es probable que pidan cambios:
-- Agregar un campo al body (ej. `moneda`) → editar `webhookBodySchema` en `schemas.ts`, agregar al item de `pagos`.
-- Cambiar el threshold de fallo transient → editar `TRANSIENT_FAILURE_RATE` env var.
-- Agregar una métrica nueva → emitir en el handler con `metrics.addMetric('NuevaMétrica', MetricUnit.X, value)`.
-- Cambiar visibility timeout → `serverless.yml` línea `VisibilityTimeout`.
-- Agregar un permiso IAM → `iamRoleStatements` de la función correspondiente.
-
----
-
-**Cualquier duda, contacto: `jplira@flink.la`. Mucho éxito con la revisión.**
+**Contacto: `jplira@flink.la`.**

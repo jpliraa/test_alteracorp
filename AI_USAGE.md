@@ -122,11 +122,9 @@ El trabajo se organizó en 7 fases (definidas en `METHODOLOGY.md`). Cada fase fu
 ### Fase 6 — README + E2E + AI_USAGE
 
 **Lo que Claude generó**:
-- `README.md` con quick start, arquitectura, prerrequisitos, setup, comandos, mapeo rúbrica→código, lo NO entregado, AI usage summary, notas para revisión en vivo.
+- `README.md` con quick start, arquitectura, prerrequisitos, setup, comandos, mapeo rúbrica→código, lo NO entregado, AI usage summary.
 - `scripts/e2e-test.sh` con 10 invocaciones curl + assertions de status code y body content. Salida colorizada, resumen al final, exit code != 0 si falla.
 - Este archivo (`AI_USAGE.md`).
-
-**Mi review**: pedí que el README tuviera un cuadro de preguntas anticipadas con respuestas listas para la revisión en vivo. Claude lo agregó al final.
 
 ---
 
@@ -150,41 +148,18 @@ El trabajo se organizó en 7 fases (definidas en `METHODOLOGY.md`). Cada fase fu
 
 ---
 
-## Capacidad de defender el código
+## Origen de los archivos
 
-Cada línea del repo fue revisada por mí antes de aceptarse. En la revisión en vivo puedo:
+Todos los archivos del repo fueron generados o modificados por Claude bajo la dirección del candidato. El candidato aportó:
 
-1. **Explicar línea por línea** los archivos críticos:
-   - `src/lib/hmac.ts` (3 guards, por qué `computeSignatureHex` no se exporta).
-   - `src/handlers/receiver.ts` (los 6 pasos, por qué cada respuesta HTTP).
-   - `src/handlers/processor.ts` (partial batch, defense in depth, métricas).
-   - `serverless.yml` (IAM por función, visibility timeout, redrive policy).
-
-2. **Justificar las 18 decisiones técnicas** (D1–D18 en `DECISIONS.md`) con sus trade-offs.
-
-3. **Modificar código en vivo**: agregar un campo al schema, cambiar el threshold de fallo transient, agregar una métrica, cambiar visibility timeout, agregar un permiso IAM.
-
-4. **Identificar lo que está MAL o INCOMPLETO**:
-   - Compensación de SQS-fail-post-DDB-success (D17 — sé la mitigación correcta).
-   - Alarmas no creadas en IaC (documentadas en OBSERVABILITY.md).
-   - Sin GSI (D13 — sé cuándo agregarla).
-
----
-
-## Archivos que NO escribí yo desde cero
-
-**Todos los archivos** del repo fueron generados o modificados por Claude bajo mi dirección. Yo aporté:
-- El enunciado (.docx + Template_B2_Serverless/).
+- El enunciado (`.docx` + `Template_B2_Serverless/`).
 - Las decisiones estratégicas (stack, alcance, qué incluir/excluir).
-- Reviews de cada archivo (acepté/rejecté/pedí cambios).
-- Las preguntas que validan mi entendimiento ("¿por qué X?", "¿qué pasa si Y?").
-- La ejecución de `npm install` y `git commit` (cuando aplique).
-
-**Esto es transparente.** El reviewer puede asumir que cualquier archivo del repo lo escribió Claude bajo mi instrucción. Lo que NO puede asumir es que no lo entiendo — la revisión en vivo de 30–45 min está diseñada para validar esto, y estoy preparado.
+- Reviews y aceptación/rechazo de cada archivo y cada propuesta.
+- La ejecución de `npm install` y `git commit`.
 
 ---
 
-## Prompts representativos (para transparencia)
+## Prompts representativos
 
 No reproduzco la conversación completa (sería ilegible), pero un sample de prompts que usé:
 
